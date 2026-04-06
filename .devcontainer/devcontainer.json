@@ -1,0 +1,5 @@
+{
+  "name": "Q Care Platform",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "postCreateCommand": "echo ready"
+}
