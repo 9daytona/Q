@@ -8,15 +8,15 @@ export default function Dashboard() {
   const [patient, setPatient] = useState([]);
   const [observations, setObservation] = useState([]);
   const [envr, setEnvr] = useState([]);
-  const [assistanceCalls, setAssistanceCalls] = useState([]);
-  const [appointments, setAppointments] = useState([]);
+  const [assistanceCall, setAssistanceCall] = useState([]);
+  const [appointment, setAppointment] = useState([]);
 
   // LOAD BACKEND FOR SELECTED PANEL
   useEffect(() => {
     if (activePanel === "Patient") fetch("/api/Patient").then(r=> r.json()).then(setPatient);
     if (activePanel === "Vitals") fetch("/api/Observation").then(r=>r.json()).then(setObservation);
     if (activePanel === "Environment") fetch("/api/envr").then(r=> r.json()).then(setEnvr);
-    if (activePanel === "Assistance") fetch("/api/AssistanceCall").then(r => r.json()).then(setAssistanceCalls);
+    if (activePanel === "Assistance") fetch("/api/AssistanceCall").then(r => r.json()).then(setAssistanceCall);
 
   }, [activePanel]);
 
@@ -80,7 +80,7 @@ export default function Dashboard() {
         {activePanel === "Assistance" && (
           <div>
             <h2>Assistance / Staff Calls</h2>
-            {assistanceCalls.map((c:any,i:number) => (
+            {assistanceCall.map((c:any,i:number) => (
               <div key={i}>
                 {c.residentName} called from {c.wing}, bed #{c.bed}
               </div>
@@ -91,7 +91,7 @@ export default function Dashboard() {
         {activePanel === "Telehealth" && (
           <div>
             <h2>Telehealth Appointments</h2>
-            {appointments.map((t:any,i:number) => (
+            {appointment.map((t:any,i:number) => (
               <div key={i}>
                 {t.residentName} with {t.specialist} at {t.time}
               </div>

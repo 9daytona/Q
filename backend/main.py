@@ -1,8 +1,45 @@
-from fastapi import FastAPI
+from fastapi import WebSocket
+#import FastAPI
 from pydantic import BaseModel
 from typing import List, Optional
+import asyncio
+from datetime import datetime
+from collections import deque
 
 app = FastAPI(title="Q Care Platform FHIR-compliant API")
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket]= []
+        self.lock = asyncio.Lock()
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        async with self.lock:
+            self.active_connections.append(websocket)
+
+    async def disconnect(self, websocket: WebSocket):
+        async with self.lock:
+            if websocket in self.active_connections:
+                self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        dead_connections = []
+
+        for connection in self.active_connections:
+            try:
+                #await connection.send_json(message)
+                await asyncio.gather(*[conn.send_json(message) for conn in self.active_connections],
+                return_exceptions=True)
+            except:
+                dead_connections.append(connection)
+        for conn in dead_connections:
+            await self.disconnect(conn)
+
+manager = ConnectionManager()
+
+
+
 
 # FHIR MODELS
 
@@ -29,11 +66,13 @@ class Patient(BaseModel):
 class Observation(BaseModel):
     resourceType: str = "Observation"
     id: str
-    status: str                     # preliminary, final
-    code: dict                      # {"coding": [{...}]}
-    subject: dict                   # {"reference": "Patient/{id}"}
+    status: str                             # preliminary, final
+    code: dict                              # {"coding": [{...}]}
+    subject: dict                           # {"reference": "Patient/{id}"}
     effectiveDateTime: str
-    valueQuantity: Optional[dict]    # {"value": 88, "unit": "bpm"}
+    category: Optional[List[dict]] = None   # Required
+    device: Optional[dict] = None           # ios mobile
+    valueQuantity: Optional[dict]           # {"value": 88, "unit": "bpm"}
 
 class Participant(BaseModel):
     actor: dict # {"reference": "Patient/{id}" or "Practitioner/{id}"}
@@ -63,7 +102,8 @@ class FamilyCall(BaseModel):
 # In-memory storage (specific for prototype stage)
 # Local arrays to be replaced with resources 
 patients: List[Patient] = []
-observations: List[Observation] = []
+#observations: List[Observation] = []
+observation_buffer = deque(maxlen=1000)
 clinical_metrics = []
 envr = []
 assistance_calls = []
@@ -85,14 +125,26 @@ def get_patients():
 # OBSERVATION ENDPOINTS
 
 @app.post("/Observation")
-def create_observation(obs: Observation):
-    observations.append(obs)
-    return obs
+async def ingest_observation(obs: Observation):
+    # Optional FHIR timestamp normalisaton
+    obs.effectiveDateTime = datetime.utcnow().isoformat()
+    observation_buffer.append(obs)
+    await manager.broadcast(obs.dict()) #safe broadcast 
+    ##################################################
+    ## Next step: Tag connections with patient ID ####
+    ##            Send only Ward A residents      ####
 
-@app.get("/Observation")
-def get_observations():
-    return observations
+    return {"status": "streamed"}
 
+@app.websocket("/ws/observation")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+
+    try:
+        while True:
+            await websocket.receive_text()
+    except Exception:
+        await manager.disconnect(websocket)
 
 # ASSISTANCE CALLS ENDPOINTS
 @app.get("/AssitanceCall")
@@ -123,7 +175,7 @@ def create_environment(env: dict):
     return env
 
 @app.get("/Environment")
-def get_environment();
+def get_environment():
     return envr
 
 
